@@ -1,2 +1,3 @@
-#Do not track raw_data files, or the push each time will take forever
-raw_data/glove.twitter.27B.100d.txt
+version https://git-lfs.github.com/spec/v1
+oid sha256:c59298e73a627cae35f4aacf00f497bb4fb348b45bcadff8d7ccf91c2d61b2f5
+size 23
