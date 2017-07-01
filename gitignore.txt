@@ -1,0 +1,2 @@
+#Do not track raw_data files, or the push each time will take forever
+raw_data/glove.twitter.27B.100d.txt
