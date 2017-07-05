@@ -1,34 +1,74 @@
 # -*- coding: utf-8 -*-
 """
-Spyder Editor
-
-This is a temporary script file.
+This script converts the raw glove and tweet data into data which the neural network can use
 """
 import re
 import pandas as pd
 import numpy as np
-from bs4 import BeautifulSoup
+import pickle
 
-def clean_tweets(df, tweet_col):
+from bs4 import BeautifulSoup
+from nltk import TweetTokenizer
+from num2words import num2words
+
+def clean_tweets(data, tweet_col):
     '''
     Function that cleans tweets to remove noise and makes them suitable for analysis
     Arguments:
-        df: Dataframe which contains the tweets to be cleaned
+        data: Dataframe which contains the tweets to be cleaned
         tweet_col: Name of column in dataframe to contain the tweets
     '''
+    df = data.copy()
     
     df[tweet_col] = df[tweet_col].map(lambda x: BeautifulSoup(x, 'lxml').get_text())
     df[tweet_col] = df[tweet_col].map(lambda x: x.lower())
     
-    #There are ways to do all the subtitutions in one go. Explore them when you have time
-    df[tweet_col] = df[tweet_col].apply(lambda x: re.sub(r"(?:http\S+)", "<link>", x)) #Doesn't work with match_dict for some reason
-    df[tweet_col] = df[tweet_col].apply(lambda x: 
-        re.sub(r"(@virginamerica|@jetblue|@united|@southwestair|@jetblue|@usairways|@americanair)", "@ airline", x ))
-    df[tweet_col] = df[tweet_col].apply(lambda x: re.sub(r"@\S+", "@ <user>", x))
-        
+    #There are ways to do all the subtitutions in one go. Explore them when you have time. Doesn't seem to work well if reg exps though
+    df[tweet_col] = df[tweet_col].apply(lambda x: re.sub(r"(?:http\S+)|#\S+|'", "", x)) #Remove links, hashtags and apostrophes
 
+    '''
+    TO DO:
+        Replace numbers with <=4 digits with their word variants. THEN
+        Find extremely uncommon words in training set (<5?<3?)
+        Replace the unknown words with the average of these uncommon words' vectors  OR with a randomly initializing the vector     
+    '''
+    #Following two lines are not necessary as the tokenizer already does it. Keeping for future reference though.
+    #df[tweet_col] = df[tweet_col].apply(lambda x: re.sub(r"@\S+", "", x)) #remove user mentions, as they are not that useless for sentiment analysis   
+    #df[tweet_col] = df[tweet_col].apply(lambda x: re.sub(r"(.)\1+", r"\1\1", x)) #Replace consecutive characters with maximum of two
     
+    tokenizer = TweetTokenizer(strip_handles=True, reduce_len=True)
+    df['tokens'] = df[tweet_col].apply(lambda x: tokenizer.tokenize(x))
+    
+    return df
 
+def create_embeddings_numbers(df, token_col, index_dict):
+    """
+    Function that takes a list of tokens and maps it to a list of indices. Each index represents the row of that token in the glove embedding array
+    Arguments:
+        df: dataframe of tweets
+        token_col: name of column which contains the list of tokens for each tweet
+        index_dict: Dictionary of (token, row index in embedding matrix). Obtained from glove file
+    """
+    unknowns = []
+    def process_list(my_list):
+        """
+        Helper function that converts each list of tokens into a list of indices
+        Arguments:
+            my_list: The list of tokens to process
+        """
+        holder = []
+        maximum_value = max(index_dict.values()) #Last row of the embedding matrix
+        for item in my_list:
+            if item in index_dict.keys():
+                holder.append(index_dict[item])
+            else:
+                unknowns.append(item)
+                holder.append(maximum_value) #The last row of the embedding matrix will be the <unk> token
+        return holder
+    
+    df['embed_indices'] = df[token_col].apply(lambda x: process_list(x))
+    return unknowns
+    
 def decrypt_glove(glove_url, dim):
     """
     This function converts the file of pretrained glove vectors into a numpy array for use in tensorflow
@@ -61,13 +101,22 @@ def decrypt_glove(glove_url, dim):
             continue
     
     print("Offset is: ", offset)
-    return index_dict, np.array(holder)  
+    
+    #Add the word embedding for the unknown token <unk> to holder. It will be the last row in the embedding matrix
+    
+    return index_dict, np.array(holder)
 
 if __name__ == "__main__":
-    tweets_url = r"D:\Data Science\Projects\twitter-airline-sentiment\Tweets.csv"
+    tweets_url = r"Tweets.csv"
     tweets_raw = pd.DataFrame.from_csv(tweets_url)
+    tweets = tweets_raw['text']
     
-    glove_url = r"D:\Data Science\Projects\twitter-airline-sentiment\raw_data\glove.twitter.27B.100d.txt"
-    glove_data = decrypt_glove(glove_url, 100)
+    glove_url = r"glove.twitter.27B.100d.txt"
+    index_dict = decrypt_glove(glove_url, 100)
+    
+    tweets_clean = clean_tweets(tweets_raw, 'text')
+    unknowns = create_embeddings_numbers(tweets_clean, "tokens", index_dict)
+    
+    foo = tweets_clean['tokens'].apply(lambda x: len(x))
     
     
