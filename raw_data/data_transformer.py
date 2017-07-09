@@ -9,7 +9,6 @@ import pickle
 
 from bs4 import BeautifulSoup
 from nltk import TweetTokenizer
-from num2words import num2words
 
 def clean_tweets(data, tweet_col):
     '''
@@ -20,23 +19,16 @@ def clean_tweets(data, tweet_col):
     '''
     df = data.copy()
     
-    df[tweet_col] = df[tweet_col].map(lambda x: BeautifulSoup(x, 'lxml').get_text())
+    df[tweet_col] = df[tweet_col].map(lambda x: BeautifulSoup(x, 'lxml').get_text()) #Remove html tokens
     df[tweet_col] = df[tweet_col].map(lambda x: x.lower())
     
     #There are ways to do all the subtitutions in one go. Explore them when you have time. Doesn't seem to work well if reg exps though
-    df[tweet_col] = df[tweet_col].apply(lambda x: re.sub(r"(?:http\S+)|#\S+|'", "", x)) #Remove links, hashtags and apostrophes
-
-    '''
-    TO DO:
-        Replace numbers with <=4 digits with their word variants. THEN
-        Find extremely uncommon words in training set (<5?<3?)
-        Replace the unknown words with the average of these uncommon words' vectors  OR with a randomly initializing the vector     
-    '''
-    #Following two lines are not necessary as the tokenizer already does it. Keeping for future reference though.
-    #df[tweet_col] = df[tweet_col].apply(lambda x: re.sub(r"@\S+", "", x)) #remove user mentions, as they are not that useless for sentiment analysis   
-    #df[tweet_col] = df[tweet_col].apply(lambda x: re.sub(r"(.)\1+", r"\1\1", x)) #Replace consecutive characters with maximum of two
-    
-    tokenizer = TweetTokenizer(strip_handles=True, reduce_len=True)
+    df[tweet_col] = df[tweet_col].apply(lambda x: re.sub(r"(\S*@\S*\.\S*)", " email address ",x)) #Replace emails with generic email
+    df[tweet_col] = df[tweet_col].apply(lambda x: re.sub(r"(?:http\S+)|#\S+|\.|-", " ", x)) #Remove links, hashtags, periods and hyphens
+    df[tweet_col] = df[tweet_col].apply(lambda x: re.sub(r"(\d+)", " digit ",x)) #Replace all numbers with "digit"
+    df[tweet_col] = df[tweet_col].apply(lambda x: re.sub(r"'", "", x)) #Replace apostrophes with nothing (instead of a space)
+        
+    tokenizer = TweetTokenizer(strip_handles=True, reduce_len=True) 
     df['tokens'] = df[tweet_col].apply(lambda x: tokenizer.tokenize(x))
     
     return df
@@ -103,20 +95,33 @@ def decrypt_glove(glove_url, dim):
     print("Offset is: ", offset)
     
     #Add the word embedding for the unknown token <unk> to holder. It will be the last row in the embedding matrix
+    embeddings = np.array(holder, dtype= "float32")
+    unk_embed = np.random.normal(np.mean(embeddings,axis=0), np.var(embeddings, axis = 0)) #Generate a random word emebdding with mean and var of the others
+    embeddings = np.append(embeddings, [unk_embed], axis=0) #Append the word embedding for unknown tokens to the embeddings matrix
+    index_dict["<unk>"] = len(embeddings) #Set unk token to last row of embeddings matrix
     
-    return index_dict, np.array(holder)
+    return index_dict, embeddings
 
+def save_obj(obj, directory):
+    with open(directory,'wb') as file:
+        pickle.dump(obj, file, protocol=pickle.HIGHEST_PROTOCOL)
+        
+    
 if __name__ == "__main__":
     tweets_url = r"Tweets.csv"
     tweets_raw = pd.DataFrame.from_csv(tweets_url)
     tweets = tweets_raw['text']
     
     glove_url = r"glove.twitter.27B.100d.txt"
-    index_dict = decrypt_glove(glove_url, 100)
+    index_dict, embedding_matrix = decrypt_glove(glove_url, 100)
     
     tweets_clean = clean_tweets(tweets_raw, 'text')
     unknowns = create_embeddings_numbers(tweets_clean, "tokens", index_dict)
     
-    foo = tweets_clean['tokens'].apply(lambda x: len(x))
+    save_obj(embedding_matrix, r"../training_files/embedding_matrix")
+    save_obj(tweets_clean, r"../training_files/tweets_clean" )
+    
+    
+        
     
     
