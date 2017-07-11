@@ -115,10 +115,11 @@ if __name__ == "__main__":
     glove_url = r"glove.twitter.27B.100d.txt"
     index_dict, embedding_matrix = decrypt_glove(glove_url, 100)
     
+    save_obj(embedding_matrix, r"../training_files/embedding_matrix")
+    
     tweets_clean = clean_tweets(tweets_raw, 'text')
     unknowns = create_embeddings_numbers(tweets_clean, "tokens", index_dict)
     
-    save_obj(embedding_matrix, r"../training_files/embedding_matrix")
     save_obj(tweets_clean, r"../training_files/tweets_clean" )
     
     
