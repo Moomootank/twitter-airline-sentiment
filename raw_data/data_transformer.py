@@ -6,6 +6,7 @@ import re
 import pandas as pd
 import numpy as np
 import pickle
+import copy
 
 from bs4 import BeautifulSoup
 from nltk import TweetTokenizer
@@ -29,38 +30,10 @@ def clean_tweets(data, tweet_col):
     df[tweet_col] = df[tweet_col].apply(lambda x: re.sub(r"'", "", x)) #Replace apostrophes with nothing (instead of a space)
         
     tokenizer = TweetTokenizer(strip_handles=True, reduce_len=True) 
-    df['tokens'] = df[tweet_col].apply(lambda x: tokenizer.tokenize(x))
+    tokens = df[tweet_col].apply(lambda x: tokenizer.tokenize(x))
     
-    return df
+    return df, tokens
 
-def create_embeddings_numbers(df, token_col, index_dict):
-    """
-    Function that takes a list of tokens and maps it to a list of indices. Each index represents the row of that token in the glove embedding array
-    Arguments:
-        df: dataframe of tweets
-        token_col: name of column which contains the list of tokens for each tweet
-        index_dict: Dictionary of (token, row index in embedding matrix). Obtained from glove file
-    """
-    unknowns = []
-    def process_list(my_list):
-        """
-        Helper function that converts each list of tokens into a list of indices
-        Arguments:
-            my_list: The list of tokens to process
-        """
-        holder = []
-        maximum_value = max(index_dict.values()) #Last row of the embedding matrix
-        for item in my_list:
-            if item in index_dict.keys():
-                holder.append(index_dict[item])
-            else:
-                unknowns.append(item)
-                holder.append(maximum_value) #The last row of the embedding matrix will be the <unk> token
-        return holder
-    
-    df['embed_indices'] = df[token_col].apply(lambda x: process_list(x))
-    return unknowns
-    
 def decrypt_glove(glove_url, dim):
     """
     This function converts the file of pretrained glove vectors into a numpy array for use in tensorflow
@@ -96,11 +69,80 @@ def decrypt_glove(glove_url, dim):
     
     #Add the word embedding for the unknown token <unk> to holder. It will be the last row in the embedding matrix
     embeddings = np.array(holder, dtype= "float32")
+    print ("Initial embedding shape:", embeddings.shape)
+    
+    np.random.seed(1) #Set the seed to ensure that results can be reproduced
     unk_embed = np.random.normal(np.mean(embeddings,axis=0), np.var(embeddings, axis = 0)) #Generate a random word emebdding with mean and var of the others
     embeddings = np.append(embeddings, [unk_embed], axis=0) #Append the word embedding for unknown tokens to the embeddings matrix
-    index_dict["<unk>"] = len(embeddings) #Set unk token to last row of embeddings matrix
+    index_dict["<unk>"] = embeddings.shape[0] - 1 #Set unk token to last row of embeddings matrix
+    print ("Embedding shape after unk:", embeddings.shape)
+    
+    embeddings = np.append(embeddings, [np.zeros(embeddings.shape[1])], axis = 0) 
+    #Create and append the vector of zeroes. This vector will be used for padding
+    index_dict["<padding>"] = embeddings.shape[0] - 1 #Now that we have added one more row, set the padding index to the last row
+    print ("Embedding shape after unk and padding", embeddings.shape)
     
     return index_dict, embeddings
+
+def create_embeddings_numbers(tokens, index_dict):
+    """
+    Function that takes a list of tokens and maps it to a list of indices. Each index represents the row of that token in the glove embedding array
+    Arguments:
+        df: dataframe of tweets
+        token_col: name of column which contains the list of tokens for each tweet
+        index_dict: Dictionary of (token, row index in embedding matrix). Obtained from glove file
+    """
+    unknowns = []
+    
+    def process_list(my_list):
+        """
+        Helper function that converts each list of tokens into a list of indices
+        Arguments:
+            my_list: The list of tokens to process
+        """
+        holder = []
+        unk_index = index_dict["<unk>"] #Row index of embedding matrix that contains vector rep of the unk token
+        for item in my_list:
+            if item in index_dict.keys():
+                holder.append(index_dict[item])
+            else:
+                unknowns.append(item)
+                holder.append(unk_index) #The last row of the embedding matrix will be the <unk> token
+        return holder
+    
+    embedding_indices = tokens.apply(lambda x: process_list(x))
+    return unknowns, embedding_indices
+
+def pad_sequences(data, max_length, zero_embedding_index):
+    """
+    Ensures that each input-output sequence pair is of length max_length
+    Since we are going to be using tf.nn.embedding_lookup, make the last row of the embedding vector
+    a vector of zeroes
+    
+    So, for the embedding lookup index, make the last row a vector of zeroes (so the second last 
+    is now the "unk" token)
+    
+    Arguments:
+        data: List of list of embedding-lookup indices. Each index in data is the list of embedding
+        lookup indices for that particular tweet/sentence
+        
+        max_length: max-length that our RNN will run for   
+        zero-embedding index: Index of the zero vector in the embedding matrix
+    """
+    
+    holder = []
+    for tweet in data:
+        length = len(tweet)
+        if length>=max_length:
+            holder.append(tweet[:max_length])
+        else:
+            number_to_extend = max_length-length
+            #Creating deep copies to avoid changing the list
+            copied_tweet = copy.deepcopy(tweet)
+            copied_tweet.extend([zero_embedding_index for i in range(number_to_extend)])
+            holder.append(copied_tweet)
+    
+    return np.array(holder, dtype= np.int32)
 
 def save_obj(obj, directory):
     with open(directory,'wb') as file:
@@ -115,13 +157,19 @@ if __name__ == "__main__":
     glove_url = r"glove.twitter.27B.100d.txt"
     index_dict, embedding_matrix = decrypt_glove(glove_url, 100)
     
-    save_obj(embedding_matrix, r"../training_files/embedding_matrix.pickle")
+    save_obj(embedding_matrix, r"../training_files/training_data/embedding_matrix.pickle")
     
-    tweets_clean = clean_tweets(tweets_raw, 'text')
-    unknowns = create_embeddings_numbers(tweets_clean, "tokens", index_dict)
+    tweets_clean, tokens = clean_tweets(tweets_raw, 'text')
+    tweets_clean.to_csv(r"../training_files/training_data/tweets_clean.csv")
     
-    save_obj(tweets_clean, r"../training_files/tweets_clean.pickle" )
+    unknowns, embedding_indices = create_embeddings_numbers(tokens, index_dict)
     
+    padded_indices = pad_sequences(embedding_indices, 150, embedding_matrix.shape[0] - 1)
+    save_obj(padded_indices, r"../training_files/training_data/padded_indices.pickle")
+    
+    one_hot_labels = pd.get_dummies(tweets_clean['airline_sentiment']).values
+    #3d array 1 hot array; negative, neural, positive labels
+    save_obj(one_hot_labels, r"../training_files/training_data/labels.pickle")
     
         
     

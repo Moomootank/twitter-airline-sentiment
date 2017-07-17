@@ -17,6 +17,8 @@ import pandas as pd
 import tensorflow as tf
 
 class LSTM_Model():
+    
+    #=====The following functions define the parameters of the model=====
     def define_fixed_hyperparams(self, n_samples, n_features, n_classes, batch, n_epochs, lr, max_l, embeddings):
         """
         Store information about data hyperparameters
@@ -47,34 +49,7 @@ class LSTM_Model():
         self.num_hidden_units = n_hidden_units
         self.num_dropout = n_dropout
         
-    def pad_sequences(data, max_length, zero_embedding_index):
-        """
-        Ensures that each input-output sequence pair is of length max_length
-        Since we are going to be using tf.nn.embedding_lookup, make the last row of the embedding vector
-        a vector of zeroes
-        
-        So, for the embedding lookup index, make the last row a vector of zeroes (so the second last 
-        is now the "unk" token)
-        
-        Arguments:
-            data: List of list of embedding-lookup indices. Each index in data is the list of embedding
-            lookup indices for that particular tweet/sentence
-            
-            max_length: max-length that our RNN will run for   
-            zero-embedding index: Index of the zero vector in the embedding matrix
-        """
-        holder = []
-        for tweet in data:
-            length = len(tweet)
-            if length>=max_length:
-                holder.append(tweet[:max_length])
-            else:
-                number_to_extend = max_length-length
-                #Creating deep copies to avoid changing the list
-                copied_tweet = copy.deepcopy(tweet)
-                holder.append(copied_tweet.extend([zero_embedding_index for i in range(number_to_extend)]))
-        return holder
-        
+    #=====The following functions define the structure of the model=====
     def add_placeholders(self):
         """
         Generates placeholder variables to represent the input tensors.
@@ -90,8 +65,9 @@ class LSTM_Model():
                                               (batch_size, n_classes), type tf.int32
         """
         #Can set first dimensions of placeholders to "None", but I state self.batch_size for my own reference
-        self.input_placeholder = tf.placeholder(dtype= tf.float32, shape = (self.batch_size, self.max_length, self.num_features))
-        self.labels_placeholder = tf.placeholder(dtype= tf.float32, shape = (self.batch_size))
+        with tf.name_scope("Data"):
+            self.input_placeholder = tf.placeholder(dtype= tf.int32, shape = (self.batch_size, self.max_length))
+            self.labels_placeholder = tf.placeholder(dtype= tf.int32, shape = (self.batch_size, self.num_classes))
     
     def create_feed_dict(self, inputs_batch, labels_batch):
         """Creates the feed_dict for training the given step.
@@ -110,8 +86,9 @@ class LSTM_Model():
         Use the input_placeholder to index into the embeddings tensor, resulting in a
               tensor of shape (self.batch_size, max_length, embed_size).
         """
-        embedding = tf.nn.embedding_lookup(params = self.pretrained_embeddings, ids = self.input_placeholder )
-        return embedding
+        with tf.name_scope("Data"):
+            embedding = tf.nn.embedding_lookup(params = self.pretrained_embeddings, ids = self.input_placeholder )
+        return tf.cast(embedding, dtype = tf.float32)
     
     def find_batch_length(self, embeddings):
         """
@@ -121,17 +98,18 @@ class LSTM_Model():
         Arguments:
             embeddings: word embeddings for the tweet
         """
-        embeddings_used = tf.sign(tf.reduce_max(tf.abs(embeddings), axis = 2))
-        """
-        tf.abs: get the absolute value of these embeddings
-        tf.reduce_max, Along the third dimension (the word_embeddings), find the maximum,
-        remove the third dimension, so the second dimension is now just the maximum
-        i.e. (batch_size, num_words, abs_word_embedding) => (batch_size, max_abs_word_embedding)
-        tf.sign(x) is =0 if x =0 or x.isnan, = 1 if x > 0
-        """
-        
-        tweet_length = tf.reduce_sum(embeddings_used, axis=1)
-        tweet_length = tf.cast(tweet_length, dtype=tf.int32)
+        with tf.name_scope("Tweet_lengths"):
+            embeddings_used = tf.sign(tf.reduce_max(tf.abs(embeddings), axis = 2))
+            """
+            tf.abs: get the absolute value of these embeddings
+            tf.reduce_max, Along the third dimension (the word_embeddings), find the maximum,
+            remove the third dimension, so the second dimension is now just the maximum
+            i.e. (batch_size, num_words, abs_word_embedding) => (batch_size, max_abs_word_embedding)
+            tf.sign(x) is =0 if x =0 or x.isnan, = 1 if x > 0
+            """
+            
+            tweet_length = tf.reduce_sum(embeddings_used, axis=1)
+            tweet_length = tf.cast(tweet_length, dtype=tf.int32)
         return tweet_length
     
     def add_prediction_op(self):
@@ -139,40 +117,53 @@ class LSTM_Model():
         Adds the RNN and LSTM ops
         """
         x = self.add_embedding() #Get the embeddings for this batch
+        print (x)
         tweet_lengths = self.find_batch_length(x) #Get the tweet lengths
         
-        init = tf.contrib.layers.xavier_initializer(uniform = True, seed= 1, dtype= tf.float32)
-        cell_to_use = tf.contrib.rnn.LSTMCell(self.num_hidden_units, initializer = init, activation = 'tanh')
-        cell_to_use = tf.contrib.rnn.DropoutWrapper(cell_to_use, output_keep_prob = 1 - self.num_dropout)
-        
-        output, state = tf.nn.dynamic_rnn(cell_to_use, inputs = x, sequence_length = tweet_lengths, dtype = tf.float32)
-        final_cell_output = output[:, -1, :] #Slice just the last column of the second layer. 
-        #final_cell_output should have dimensions (batch_size, num_hidden_units)
+        with tf.name_scope("Prediction_ops"):
+            init = tf.contrib.layers.xavier_initializer(uniform = True, dtype= tf.float32)
+            cell_to_use = tf.contrib.rnn.LSTMCell(self.num_hidden_units, initializer = init, activation = tf.tanh)
+            cell_to_use = tf.contrib.rnn.DropoutWrapper(cell_to_use, output_keep_prob = 1 - self.num_dropout)
+            
+            output, state = tf.nn.dynamic_rnn(cell_to_use, inputs = x, sequence_length = tweet_lengths, dtype = tf.float32)
+            final_cell_output = output[:, -1, :] #Slice just the last column of the second layer. 
+            #final_cell_output should have dimensions (batch_size, num_hidden_units)
         return final_cell_output
     
-    def add_loss_function(self, final_cell_output):
+    def add_loss_op(self, final_cell_output):
         """
         Adds the loss_function
         """
-        init = tf.contrib.layers.xavier_initializer(uniform = True, seed= 1, dtype= tf.float32)
-        class_weights = tf.get_variable("class_weights", initializer = init, shape = (self.num_hidden_units, self.num_classes))
-        class_bias = tf.get_variable("class_bias", initializer = init, shape = (self.num_classes))
-        predictions = tf.matmul(final_cell_output, class_weights) + class_bias #(batch_size x num_classes output)
+        with tf.name_scope("Prediction_ops"):
+            init = tf.contrib.layers.xavier_initializer(uniform = True, seed= 1, dtype= tf.float32)
+            class_weights = tf.get_variable("class_weights", initializer = init, shape = (self.num_hidden_units, self.num_classes))
+            class_bias = tf.get_variable("class_bias", initializer = init, shape = (self.num_classes))
+            predictions = tf.matmul(final_cell_output, class_weights) + class_bias #(batch_size x num_classes output)
         
-        loss = tf.nn.softmax_cross_entropy_with_logits(labels = self.labels_placeholder, logits = predictions)
-        loss = tf.reduce_mean(loss)
+        with tf.name_scope("loss_ops"):
+            loss = tf.nn.softmax_cross_entropy_with_logits(labels = self.labels_placeholder, logits = predictions)
+            loss = tf.reduce_mean(loss)
         return loss
     
     def add_training_op(self, loss):
         """
         Adds the training op. Loss is the loss value given by add_loss_function
         """
-        optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
-        train_op = optimizer.minimize(loss)
+        with tf.name_scope("optimizer"):
+            optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
+            train_op = optimizer.minimize(loss)
+            #Whenever the train_op runs once, increment global_step by one
         
         return train_op
     
-    def get_minibatches(self, data, x_cols, labels, b_size):
+    def initialize_ops(self):
+        self.add_placeholders() # Add the placeholders
+        self.pred = self.add_prediction_op() #Add the prediction op
+        self.loss = self.add_loss_op(self.pred)
+        self.train = self.add_training_op(self.loss)
+    
+    #===== The following functions execute the model =====
+    def get_minibatches(self, data, labels, b_size):
         '''
         Helper function that returns a list of tuples of batch_size sized inputs and labels
         Return n_samples/batch size number of batches
@@ -188,17 +179,59 @@ class LSTM_Model():
         if data.shape[0] < b_size:
             print ("There are fewer samples than the batch size. Error!")
             sys.exit()
-                        
-        reshuffled_data = data.sample(frac=1) #Get a dataframe of completely reshuffled rows
-        num_batches = math.floor(data.shape[0]/b_size) #Number of batches, if b_size is not a factor some data will be left out. Ah well.
+        
+        data_length = len(data)
+        assert data_length==len(labels)
+        
+        p = np.random.permutation(data_length)
+        reshuffled_data = data[p]
+        reshuffled_labels = labels[p] #These create copies of the array, so the original copies are untouched
+        
+        num_batches = math.floor(data_length/b_size) #Number of batches, if b_size is not a factor some data will be left out. Ah well.
         
         batches = []         
         for i in range(num_batches):
             start = i*b_size
-            sample = reshuffled_data.iloc[start:(start + b_size)] # Sample of b size
-            batches.append((sample[x_cols].values, sample[labels].values))
+            data_sample = reshuffled_data[start:(start + b_size)] # Sample of b size
+            labels_sample = reshuffled_labels[start:(start + b_size)]
+            batches.append((data_sample, labels_sample))
         
         return batches
+    
+    def run_epoch(self, session, data, labels):
+        n_minibatches, total_loss = 0 , 0
+        for input_batch, labels_batch in self.get_minibatches(data, labels, self.batch_size):
+            feed = self.create_feed_dict(input_batch, labels_batch)
+            _ , loss = session.run([self.train, self.loss], feed_dict = feed)
+            n_minibatches += 1
+            total_loss += loss
+        epoch_average_loss = total_loss/n_minibatches
+        return epoch_average_loss
+    
+    def fit(self, session, data, labels):
+        
+        losses = []
+        start = time.time() # Start time of the entire model
+        previous = start
+        
+        #self.global_step = tf.Variable(0, dtype = tf.int32, trainable = False, name = 'global_step')
+        #set the global step
+        for epoch in range(self.num_epochs):
+            average_loss = self.run_epoch(session, data, labels)
+            if epoch % 100 ==0:
+                current_time = time.time()
+                duration = current_time - start
+                since_last = current_time - previous
+                print ("Epoch number {e} completed. Time taken since start: {s_start}. Time taken since last checkpoint: {s_checkpoint}"
+                       .format(e= epoch, s_start = duration, s_checkpoint = since_last ))
+                previous = current_time #Set the new "last checkpoint" to this one
+            losses.append(average_loss)
+        return losses #Can try to plot how much the loss has gone down
+            
+            
+    
+            
+       
         
         
         
