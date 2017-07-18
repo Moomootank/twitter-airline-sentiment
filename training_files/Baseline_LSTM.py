@@ -117,7 +117,6 @@ class LSTM_Model():
         Adds the RNN and LSTM ops
         """
         x = self.add_embedding() #Get the embeddings for this batch
-        print (x)
         tweet_lengths = self.find_batch_length(x) #Get the tweet lengths
         
         with tf.name_scope("Prediction_ops"):
@@ -202,12 +201,12 @@ class LSTM_Model():
         n_minibatches, total_loss = 0 , 0
         for input_batch, labels_batch in self.get_minibatches(data, labels, self.batch_size):
             feed = self.create_feed_dict(input_batch, labels_batch)
-            _ , loss = session.run([self.train, self.loss], feed_dict = feed)
+            _ , batch_loss = session.run([self.train, self.loss], feed_dict = feed)
             n_minibatches += 1
-            total_loss += loss
+            total_loss += batch_loss
         epoch_average_loss = total_loss/n_minibatches
         return epoch_average_loss
-    
+     
     def fit(self, session, data, labels):
         
         losses = []
@@ -218,12 +217,20 @@ class LSTM_Model():
         #set the global step
         for epoch in range(self.num_epochs):
             average_loss = self.run_epoch(session, data, labels)
-            if epoch % 100 ==0:
+            if epoch % 50 ==0 or epoch==self.num_epochs:
                 current_time = time.time()
                 duration = current_time - start
+                duration_min = math.floor(duration/60)
+                duration_sec = duration % 60
                 since_last = current_time - previous
-                print ("Epoch number {e} completed. Time taken since start: {s_start}. Time taken since last checkpoint: {s_checkpoint}"
-                       .format(e= epoch, s_start = duration, s_checkpoint = since_last ))
+                since_last_min = math.floor(since_last/60)
+                since_last_sec = since_last % 60 
+                print ("Epoch number {e} completed. Time taken since start: {start_min} min {start_sec} s."
+                       .format(e = epoch, start_min = duration_min, start_sec = duration_sec))
+                print ("Time taken since last checkpoint: {last_min} min {last_sec} s."
+                       .format(last_min = since_last_min, last_sec = since_last_sec ))
+                print ("Average loss this epoch is:" , average_loss)
+                print ()
                 previous = current_time #Set the new "last checkpoint" to this one
             losses.append(average_loss)
         return losses #Can try to plot how much the loss has gone down

@@ -34,18 +34,18 @@ if __name__ == "__main__":
     #Let's make sure the thing trains first
     with tf.Graph().as_default():
         model = LSTM_Model()
-        model.define_fixed_hyperparams(14640,100,3,2928, 200, 1e-4, 150, embedding_matrix)
+        model.define_fixed_hyperparams(14640,100,3,732, 1500, 1e-4, 150, embedding_matrix)
         #n_samples, n_features, n_classes, batch, n_epochs, lr, max_l, embeddings
-        model.define_network_hyperparams(200,0.5)
+        model.define_network_hyperparams(157 ,0.7)
         #n_hidden units, dropout
         
         model.initialize_ops()
         variables_init = tf.global_variables_initializer()
         with tf.Session() as sess:
             sess.run(variables_init)
-            losses = sess.run(model.fit(sess, padded_indices, labels))
-            print ("Last training loss is", loss[-1])
-            sns.lmplot(losses)
+            losses = model.fit(sess, padded_indices, labels)
+            print ("Last training loss is", losses[-1])
+            sns.tsplot(losses)
         
 
     
