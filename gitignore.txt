@@ -1,1 +1,3 @@
-raw_data\glove.twitter.27B.100d.txt
+version https://git-lfs.github.com/spec/v1
+oid sha256:9bfd4fbe3aa6d5e1457245e55da4fa5bb71aaaa3a75b9b7140e3a26522cb2135
+size 35
