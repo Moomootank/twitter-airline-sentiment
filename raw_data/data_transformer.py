@@ -150,7 +150,7 @@ def save_obj(obj, directory):
         
     
 if __name__ == "__main__":
-    tweets_url = r"Tweets.csv"
+    tweets_url = r"D:\Data Science\Projects\twitter-airline-sentiment\raw_data\Tweets.csv"
     tweets_raw = pd.DataFrame.from_csv(tweets_url)
     tweets = tweets_raw['text']
     
