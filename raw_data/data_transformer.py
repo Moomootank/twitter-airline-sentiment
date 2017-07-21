@@ -10,6 +10,7 @@ import copy
 
 from bs4 import BeautifulSoup
 from nltk import TweetTokenizer
+from sklearn.model_selection import train_test_split
 
 def clean_tweets(data, tweet_col):
     '''
@@ -148,9 +149,15 @@ def save_obj(obj, directory):
     with open(directory,'wb') as file:
         pickle.dump(obj, file, protocol=pickle.HIGHEST_PROTOCOL)
         
+def load_obj(directory):
+    with open(directory, 'rb') as file:
+        return pickle.load(file)
+    
+
     
 if __name__ == "__main__":
-    tweets_url = r"D:\Data Science\Projects\twitter-airline-sentiment\raw_data\Tweets.csv"
+    
+    tweets_url = r"Tweets.csv"
     tweets_raw = pd.DataFrame.from_csv(tweets_url)
     tweets = tweets_raw['text']
     
@@ -171,6 +178,15 @@ if __name__ == "__main__":
     #3d array 1 hot array; negative, neural, positive labels
     save_obj(one_hot_labels, r"../training_files/training_data/labels.pickle")
     
-        
+    #Split the data 80-10-10 into train, validation and test sets
+    x_train_val, x_test, y_train_val, y_test = train_test_split(padded_indices, one_hot_labels, test_size = 0.1, stratify=one_hot_labels)
+    save_obj(x_test,r"../training_files/training_data/test_data/test_indices.pickle")
+    save_obj(y_test,r"../training_files/training_data/test_data/test_labels.pickle")
     
+    x_train, x_val, y_train, y_val = train_test_split(x_train_val, y_train_val, test_size = 0.1, stratify=y_train_val)
+    save_obj(x_train, r"../training_files/training_data/train_data/train_indices.pickle")
+    save_obj(y_train, r"../training_files/training_data/train_data/train_labels.pickle")
+    
+    save_obj(x_val, r"../training_files/training_data/validation_data/validation_indices.pickle")
+    save_obj(y_val, r"../training_files/training_data/validation_data/validation_labels.pickle")
     
