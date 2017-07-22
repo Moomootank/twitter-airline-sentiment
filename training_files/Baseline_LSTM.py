@@ -214,7 +214,7 @@ class LSTM_Model():
         #set the global step
         for epoch in range(self.num_epochs):
             average_loss = self.run_epoch(session, data, labels)
-            if epoch % 50 ==0 or epoch==self.num_epochs:
+            if epoch % 50 ==0 or epoch==self.num_epochs-1: #-1 due to characteristics of range
                 current_time = time.time()
                 duration = current_time - start
                 duration_min = math.floor(duration/60)
@@ -232,7 +232,7 @@ class LSTM_Model():
             losses.append(average_loss)
         return losses #Can try to plot how much the loss has gone down
     
-    def predict_other(self, sess, other_data, other_labels):
+    def predict_other(self, session, other_data, other_labels):
         '''
         Use the trained model to predict a batch of non-train data
         Arguments:
@@ -245,7 +245,7 @@ class LSTM_Model():
         for input_batch, labels_batch in self.get_minibatches(other_data,other_labels, self.batch_size):       
             #Need to do this in batches as we might not have enough memory
             feed = self.create_feed_dict(other_data, other_labels)
-            batch_loss = sess.run(self.loss(self.pred), feed_dict = feed)
+            batch_loss = session.run(self.loss, feed_dict = feed) #It will call itself
             total_loss += batch_loss
             n_minibatches+= 1
             #Idk, return total loss, or average over batches?
