@@ -28,13 +28,16 @@ if __name__ == "__main__":
     tweets_url = r"D:\Data Science\Projects\twitter-airline-sentiment\training_files\training_data\tweets_clean.csv"
     tweets_data = pd.read_csv(tweets_url,encoding = "windows-1252") #Apparently windows 1252 removes the error?...
     
-    padded_indices = load_obj(r"D:\Data Science\Projects\twitter-airline-sentiment\training_files\training_data\padded_indices.pickle")
-    labels = load_obj(r"D:\Data Science\Projects\twitter-airline-sentiment\training_files\training_data\labels.pickle")
+    train_indices = load_obj(r"D:\Data Science\Projects\twitter-airline-sentiment\training_files\training_data\train_data\train_indices.pickle")
+    train_labels = load_obj(r"D:\Data Science\Projects\twitter-airline-sentiment\training_files\training_data\train_data\train_labels.pickle")
+    
+    val_indices = load_obj(r"D:\Data Science\Projects\twitter-airline-sentiment\training_files\training_data\validation_data\validation_indices.pickle")
+    val_labels = load_obj(r"D:\Data Science\Projects\twitter-airline-sentiment\training_files\training_data\validation_data\validation_labels.pickle")
     
     #Let's make sure the thing trains first
     with tf.Graph().as_default():
         model = LSTM_Model()
-        model.define_fixed_hyperparams(14640,100,3,732, 1500, 1e-4, 150, embedding_matrix)
+        model.define_fixed_hyperparams(14640,100,3,732, 100, 1e-4, 150, embedding_matrix)
         #n_samples, n_features, n_classes, batch, n_epochs, lr, max_l, embeddings
         model.define_network_hyperparams(157 ,0.7)
         #n_hidden units, dropout
@@ -43,9 +46,10 @@ if __name__ == "__main__":
         variables_init = tf.global_variables_initializer()
         with tf.Session() as sess:
             sess.run(variables_init)
-            losses = model.fit(sess, padded_indices, labels)
-            print ("Last training loss is", losses[-1])
+            losses = model.fit(sess, train_indices, train_labels)
             sns.tsplot(losses)
+            print ("Calculating prediction loss now....")
+            other_avg_loss = model.predict_other(sess, val_indices, val_labels)
         
 
     
