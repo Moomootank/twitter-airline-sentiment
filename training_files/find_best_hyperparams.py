@@ -77,21 +77,7 @@ if __name__ == "__main__":
     val_labels = load_obj(r"D:\Data Science\Projects\twitter-airline-sentiment\training_files\training_data\validation_data\validation_labels.pickle")
     
     #Let's make sure the thing trains first
-    with tf.Graph().as_default():
-        model = LSTM_Model()
-        model.define_fixed_hyperparams(11858,100,3,659, 100, 1e-4, 150, embedding_matrix)
-        #n_samples, n_features, n_classes, batch, n_epochs, lr, max_l, embeddings
-        model.define_network_hyperparams(157 ,0.7)
-        #n_hidden units, dropout
-        
-        model.initialize_ops()
-        variables_init = tf.global_variables_initializer()
-        with tf.Session() as sess:
-            sess.run(variables_init)
-            losses = model.fit(sess, train_indices, train_labels)
-            sns.tsplot(losses)
-            print ("Calculating prediction loss now....")
-            other_avg_loss = model.predict_other(sess, val_indices, val_labels)
+    best, trials = hyperopt_wrapper_nn(train_indices, train_labels, val_indices, val_labels)
         
 
     
