@@ -8,7 +8,6 @@ This file contains the basic word-embedding LSTM model
 """
 
 import time
-import copy
 import sys
 import math
 
@@ -64,10 +63,10 @@ class LSTM_Model():
         labels_placeholder: Labels placeholder tensor of shape
                                               (batch_size, n_classes), type tf.int32
         """
-        #Can set first dimensions of placeholders to "None", but I state self.batch_size for my own reference
+        #Set dimensions of placeholders to none, so that you can use it
         with tf.name_scope("Data"):
-            self.input_placeholder = tf.placeholder(dtype= tf.int32, shape = (self.batch_size, self.max_length))
-            self.labels_placeholder = tf.placeholder(dtype= tf.int32, shape = (self.batch_size, self.num_classes))
+            self.input_placeholder = tf.placeholder(dtype= tf.int32, shape = (None, self.max_length))
+            self.labels_placeholder = tf.placeholder(dtype= tf.int32, shape = (None, self.num_classes))
     
     def create_feed_dict(self, inputs_batch, labels_batch):
         """Creates the feed_dict for training the given step.
@@ -127,18 +126,16 @@ class LSTM_Model():
             output, state = tf.nn.dynamic_rnn(cell_to_use, inputs = x, sequence_length = tweet_lengths, dtype = tf.float32)
             final_cell_output = output[:, -1, :] #Slice just the last column of the second layer. 
             #final_cell_output should have dimensions (batch_size, num_hidden_units)
-        return final_cell_output
-    
-    def add_loss_op(self, final_cell_output):
-        """
-        Adds the loss_function
-        """
-        with tf.name_scope("Prediction_ops"):
-            init = tf.contrib.layers.xavier_initializer(uniform = True, seed= 1, dtype= tf.float32)
             class_weights = tf.get_variable("class_weights", initializer = init, shape = (self.num_hidden_units, self.num_classes))
             class_bias = tf.get_variable("class_bias", initializer = init, shape = (self.num_classes))
             predictions = tf.matmul(final_cell_output, class_weights) + class_bias #(batch_size x num_classes output)
-        
+            
+        return predictions
+    
+    def add_loss_op(self, predictions):
+        """
+        Adds the loss_function
+        """        
         with tf.name_scope("loss_ops"):
             loss = tf.nn.softmax_cross_entropy_with_logits(labels = self.labels_placeholder, logits = predictions)
             loss = tf.reduce_mean(loss)
@@ -234,6 +231,30 @@ class LSTM_Model():
                 previous = current_time #Set the new "last checkpoint" to this one
             losses.append(average_loss)
         return losses #Can try to plot how much the loss has gone down
+    
+    def predict_other(self, sess, other_data, other_labels):
+        '''
+        Use the trained model to predict a batch of non-train data
+        Arguments:
+            session: The tensorflow session
+            data: the val or test padded word_embedding indices
+            other_labels: the val or test labels        
+        '''
+        
+        n_minibatches, total_loss = 0, 0
+        for input_batch, labels_batch in self.get_minibatches(other_data,other_labels, self.batch_size):       
+            #Need to do this in batches as we might not have enough memory
+            feed = self.create_feed_dict(other_data, other_labels)
+            batch_loss = sess.run(self.loss(self.pred), feed_dict = feed)
+            total_loss += batch_loss
+            n_minibatches+= 1
+            #Idk, return total loss, or average over batches?
+        average_loss = total_loss/n_minibatches
+        print("Total other_loss is:", total_loss)
+        print ("Average batch other_loss is:", average_loss)
+        return average_loss
+        
+        
             
             
     
