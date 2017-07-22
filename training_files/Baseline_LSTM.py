@@ -18,22 +18,22 @@ import tensorflow as tf
 class LSTM_Model():
     
     #=====The following functions define the parameters of the model=====
-    def define_fixed_hyperparams(self, n_samples, n_features, n_classes, batch, n_epochs, lr, max_l, embeddings):
+    def define_fixed_hyperparams(self, n_features, n_classes, batch, other_batch, n_epochs, lr, max_l, embeddings):
         """
         Store information about data hyperparameters
-        n_samples = number of rows in data
         n_features = number of columns (independent variables) in data i.e dimension of word embedding
         n_classes = number of classes to predict
         batch = batch size to use in stochastic gradient descent
+        other_batch = batch size of validation/test set
         n_epochs = number of epochs to train for 
         lr = learning rate    
         max_l = max length that RNN can extend for (i.e. longest sequence to parse)
         embeddings = pretrained embeddings that we will use
         """
-        self.sample_size = n_samples    
         self.embed_size = n_features
         self.num_classes = n_classes
         self.batch_size = batch
+        self.other_size = other_batch
         self.num_epochs =  n_epochs
         self.learning_rate = lr
         self.max_length = max_l
@@ -242,7 +242,7 @@ class LSTM_Model():
         '''
         
         n_minibatches, total_loss = 0, 0
-        for input_batch, labels_batch in self.get_minibatches(other_data,other_labels, self.batch_size):       
+        for input_batch, labels_batch in self.get_minibatches(other_data,other_labels, self.other_size):       
             #Need to do this in batches as we might not have enough memory
             feed = self.create_feed_dict(other_data, other_labels)
             batch_loss = session.run(self.loss, feed_dict = feed) #It will call itself
@@ -253,16 +253,4 @@ class LSTM_Model():
         print("Total other_loss is:", total_loss)
         print ("Average batch other_loss is:", average_loss)
         return average_loss
-        
-        
-            
-            
     
-            
-       
-        
-        
-        
-        
-        
-        
