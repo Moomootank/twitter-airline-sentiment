@@ -30,9 +30,10 @@ def hyperopt_wrapper_nn(train_indices, train_labels, other_indices, other_labels
     
     def train_model(params):
         #Params are the parameters that you want hyperopt to optimize
+        print ("Optimizing params:", params)
         with tf.Graph().as_default():
             model = LSTM_Model()
-            model.define_fixed_hyperparams(100,3, 847, 659, 850, 1e-4, 150, embedding_matrix)
+            model.define_fixed_hyperparams(100,3, 539, 659, 850, 1e-4, 150, embedding_matrix)
             #n_features, n_classes, batch, other_batch, n_epochs, lr, max_l, embeddings
             model.define_network_hyperparams(**params)
             #unfold params into the model
@@ -43,8 +44,11 @@ def hyperopt_wrapper_nn(train_indices, train_labels, other_indices, other_labels
                 sess.run(variables_init)
                 losses = model.fit(sess, train_indices, train_labels)
                 sns.tsplot(losses)
+                plt.show()
+                plt.clf()
                 print ("Calculating prediction loss now....")
-                other_avg_loss = model.predict_other(sess, val_indices, val_labels)         
+                other_avg_loss = model.predict_other(sess, val_indices, val_labels)  
+                print()
                 return other_avg_loss # return the validation loss
             
     def minimize_this(params):
@@ -54,10 +58,10 @@ def hyperopt_wrapper_nn(train_indices, train_labels, other_indices, other_labels
     
     nndict = {'n_hidden_units': hp.quniform('n_hidden_units', 50, 300, 1), 'n_dropout' : hp.uniform('n_dropout',0.1,0.90)}
     trials = Trials()
-    best = fmin(fn=minimize_this, space = nndict, algo= tpe.suggest, max_evals = 2, trials= trials)
+    best = fmin(fn=minimize_this, space = nndict, algo= tpe.suggest, max_evals = 25, trials= trials)
     
-    save_obj(best, r"/training_logs/best_hyperparams.pickle")
-    save_obj(trials, r"/training_logs/hyperparam_trials.pickle")
+    save_obj(best, r"D:\Data Science\Projects\twitter-airline-sentiment\training_files\training_logs\best_hyperparams.pickle")
+    save_obj(trials, r"D:\Data Science\Projects\twitter-airline-sentiment\training_files\training_logs\hyperparam_trials.pickle")
     print ('Best hyperparams:', best)
     return best, trials
         
