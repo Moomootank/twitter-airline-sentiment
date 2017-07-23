@@ -46,28 +46,31 @@ def decrypt_glove(glove_url, dim):
     holder = []
     index_dict = {}
     
-    offset = 0
-    
+    current = 0
+    non_eng = []
+
     for index in range(len(glove_file)):
         line = glove_file[index].split()
         try:
             if len(line)!=(dim+1):
+                #There might be some word vectors with errors in length. I know of at least one
                 print ("The word embedding for {word} is not of the required dimensionality".format(word=line[0]))
                 print ("Embedding is of length: ", len(line))
-                offset = offset + 1
                 continue
-            
-            index_dict[line[0]] = index - offset 
-            #Store the row_index of this word in a dict. If a previous line was wrong, then you have to offset the index of this line
+           
+            word = line[0]         
+            word.encode('ascii') #Try to encode it to check if it is ascii. If an error is thrown, the word is not english
+            index_dict[word] = current
             holder.append(line[1:]) #Exclude index 0, as that is the word itself
+            current = current + 1
         except IndexError:
             print ("Null vector triggered at index: ", index)
             print ("Line is: ", line)
-            offset = offset + 1
             continue
-    
-    print("Offset is: ", offset)
-    
+        except UnicodeEncodeError:
+            non_eng.append(word)
+            continue
+
     #Add the word embedding for the unknown token <unk> to holder. It will be the last row in the embedding matrix
     embeddings = np.array(holder, dtype= "float32")
     print ("Initial embedding shape:", embeddings.shape)
@@ -83,7 +86,7 @@ def decrypt_glove(glove_url, dim):
     index_dict["<padding>"] = embeddings.shape[0] - 1 #Now that we have added one more row, set the padding index to the last row
     print ("Embedding shape after unk and padding", embeddings.shape)
     
-    return index_dict, embeddings
+    return index_dict, embeddings, non_eng
 
 def create_embeddings_numbers(tokens, index_dict):
     """
@@ -152,19 +155,17 @@ def save_obj(obj, directory):
 def load_obj(directory):
     with open(directory, 'rb') as file:
         return pickle.load(file)
-    
-
-    
+        
 if __name__ == "__main__":
     
     tweets_url = r"Tweets.csv"
     tweets_raw = pd.DataFrame.from_csv(tweets_url)
     tweets = tweets_raw['text']
     
-    glove_url = r"glove.twitter.27B.100d.txt"
-    index_dict, embedding_matrix = decrypt_glove(glove_url, 100)
+    glove_url = r"D:\Data Science\Projects\twitter-airline-sentiment\raw_data\glove.twitter.27B.100d.txt"
+    index_dict, embedding_matrix, non_eng = decrypt_glove(glove_url, 100)
     
-    save_obj(embedding_matrix, r"../training_files/training_data/embedding_matrix.pickle")
+    save_obj(embedding_matrix, r"D:\Data Science\Projects\twitter-airline-sentiment/training_files/training_data/embedding_matrix.pickle")
     
     tweets_clean, tokens = clean_tweets(tweets_raw, 'text')
     tweets_clean.to_csv(r"../training_files/training_data/tweets_clean.csv")
