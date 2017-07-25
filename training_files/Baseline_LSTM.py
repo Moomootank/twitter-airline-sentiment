@@ -37,7 +37,7 @@ class LSTM_Model():
         self.num_epochs =  n_epochs
         self.learning_rate = lr
         self.max_length = max_l
-        self.pretrained_embeddings = embeddings
+        self.pretrained_embeddings = embeddings    
     
     def define_network_hyperparams(self, n_hidden_units, n_dropout):
         '''
@@ -47,6 +47,8 @@ class LSTM_Model():
         '''
         self.num_hidden_units = n_hidden_units
         self.num_dropout = n_dropout
+        print ("Num_hidden_units is:", self.num_hidden_units)
+        print ("Num-dropout is:", self.num_dropout)
         
     #=====The following functions define the structure of the model=====
     def add_placeholders(self):
