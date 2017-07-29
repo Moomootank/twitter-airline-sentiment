@@ -32,6 +32,7 @@ def train_model(**params):
     print ("Optimizing params:", params)
     with tf.Graph().as_default():
         model = LSTM_Model()
+        #847
         model.define_fixed_hyperparams(100,3, 847, 659, 850, 1e-3, 150, embedding_matrix)
         #n_features, n_classes, batch, other_batch, n_epochs, lr, max_l, embeddings
         model.define_network_hyperparams(**params)

@@ -166,13 +166,13 @@ if __name__ == "__main__":
     index_dict, embedding_matrix, non_eng = decrypt_glove(glove_url, 100)
     
     save_obj(embedding_matrix, r"D:\Data Science\Projects\twitter-airline-sentiment/training_files/training_data/embedding_matrix.pickle")
-    
+
     tweets_clean, tokens = clean_tweets(tweets_raw, 'text')
     tweets_clean.to_csv(r"../training_files/training_data/tweets_clean.csv")
-    
+
     unknowns, embedding_indices = create_embeddings_numbers(tokens, index_dict)
-    
     padded_indices = pad_sequences(embedding_indices, 150, embedding_matrix.shape[0] - 1)
+    
     save_obj(padded_indices, r"../training_files/training_data/padded_indices.pickle")
     
     one_hot_labels = pd.get_dummies(tweets_clean['airline_sentiment']).values
