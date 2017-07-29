@@ -26,32 +26,33 @@ def load_obj(name):
     with open(name, 'rb') as file:
         return pickle.load(file)
 
-def train_model(**params):
-    #Function that trains a tensorflow model with the desired parameters, then checks loss on validation/test set
-    #Params are the parameters that you want hyperopt to optimize
-    print ("Optimizing params:", params)
-    with tf.Graph().as_default():
-        model = LSTM_Model()
-        #847
-        model.define_fixed_hyperparams(100,3, 847, 659, 850, 1e-3, 150, embedding_matrix)
-        #n_features, n_classes, batch, other_batch, n_epochs, lr, max_l, embeddings
-        model.define_network_hyperparams(**params)
-        #unfold params into the model
-        
-        model.initialize_ops()
-        variables_init = tf.global_variables_initializer()
-        with tf.Session() as sess:
-            sess.run(variables_init)
-            losses = model.fit(sess, train_indices, train_labels)
-            sns.tsplot(losses)
-            plt.show()
-            plt.clf()
-            print ("Calculating prediction loss now....")
-            other_avg_loss = model.predict_other(sess, val_indices, val_labels)  
-            print()
-            return other_avg_loss # return the validation loss
-
-def hyperopt_wrapper_nn(train_indices, train_labels, other_indices, other_labels):            
+def hyperopt_wrapper_nn(train_indices, train_labels, other_indices, other_labels):    
+    
+    def train_model(**params):
+        #Function that trains a tensorflow model with the desired parameters, then checks loss on validation/test set
+        #Params are the parameters that you want hyperopt to optimize
+        print ("Optimizing params:", params)
+        with tf.Graph().as_default():
+            model = LSTM_Model()
+            #847
+            model.define_fixed_hyperparams(100,3, 847, 659, 850, 1e-3, 150, embedding_matrix)
+            #n_features, n_classes, batch, other_batch, n_epochs, lr, max_l, embeddings
+            model.define_network_hyperparams(**params)
+            #unfold params into the model
+            
+            model.initialize_ops()
+            variables_init = tf.global_variables_initializer()
+            with tf.Session() as sess:
+                sess.run(variables_init)
+                losses = model.fit(sess, train_indices, train_labels)
+                sns.tsplot(losses)
+                plt.show()
+                plt.clf()
+                print ("Calculating prediction loss now....")
+                other_avg_loss = model.predict_other(sess, other_indices, other_labels)  
+                print()
+                return other_avg_loss # return the validation loss    
+            
     def minimize_this(params):
         
         score = train_model(params)
@@ -70,6 +71,31 @@ def randomized_search(train_indices, train_labels, other_indices, other_labels, 
     #Randomized hyperparameter search for tensorflow neural network
     #Used instead of hyperopt because hyperopt tends to crash my potato computer (random kernel errors)
     num_evals = 10
+    def train_model(**params):
+        #Function that trains a tensorflow model with the desired parameters, then checks loss on validation/test set
+        #Params are the parameters that you want hyperopt to optimize
+        print ("Optimizing params:", params)
+        with tf.Graph().as_default():
+            model = LSTM_Model()
+            #847
+            model.define_fixed_hyperparams(100,3, 847, 659, 850, 1e-3, 150, embedding_matrix)
+            #n_features, n_classes, batch, other_batch, n_epochs, lr, max_l, embeddings
+            model.define_network_hyperparams(**params)
+            #unfold params into the model
+            
+            model.initialize_ops()
+            variables_init = tf.global_variables_initializer()
+            with tf.Session() as sess:
+                sess.run(variables_init)
+                losses = model.fit(sess, train_indices, train_labels)
+                sns.tsplot(losses)
+                plt.show()
+                plt.clf()
+                print ("Calculating prediction loss now....")
+                other_avg_loss = model.predict_other(sess, other_indices, other_labels)  
+                print()
+                return other_avg_loss # return the validation loss  
+    
     for search in range(num_evals):
         n_hidden_units = np.random.randint(50,300)
         n_dropout = np.random.uniform(0.1, 0.9)
