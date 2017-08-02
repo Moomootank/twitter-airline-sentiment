@@ -14,6 +14,8 @@ import math
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+from sklearn.metrics import f1_score
+from sklearn.metrics import confusion_matrix
 
 class LSTM_Model():
     
@@ -236,25 +238,44 @@ class LSTM_Model():
     
     def predict_other(self, session, other_data, other_labels):
         '''
-        Use the trained model to predict a batch of non-train data. This function returns cross-entropy loss,
-        which helps to validate model parameters
+        Use the trained model to predict a batch of non-train data
         Arguments:
             session: The tensorflow session
             data: the val or test padded word_embedding indices
             other_labels: the val or test labels        
         '''
         
-        n_minibatches, total_loss = 0, 0, 0
+        n_minibatches, total_loss = 0, 0
         for input_batch, labels_batch in self.get_minibatches(other_data,other_labels, self.other_size):       
             #Need to do this in batches as we might not have enough memory
-            feed = self.create_feed_dict(other_data, other_labels)
-            batch_loss = session.run(self.loss, feed_dict = feed)
+            feed = self.create_feed_dict(input_batch, labels_batch)
+            batch_loss = session.run(self.loss, feed_dict = feed) #It will call itself
             total_loss += batch_loss
             n_minibatches+= 1
-            
             #Idk, return total loss, or average over batches?
         average_loss = total_loss/n_minibatches
         print("Total other_loss is:", total_loss)
         print ("Average batch other_loss is:", average_loss)
         return average_loss
+    
+    def predict_f1(self, session, other_data, other_labels):
+        '''
+        Use the trained model to predict the f1 score for a batch of non-train data
+        '''
+        predictions = []
+        labels = []
+        for input_batch, labels_batch in self.get_minibatches(other_data,other_labels, self.other_size):
+            feed = self.create_feed_dict(input_batch, labels_batch)
+            batch_probs = tf.nn.softmax(self.pred)
+            pred_label = session.run(tf.argmax(batch_probs, axis = 1), feed_dict = feed) #Batch sized length labels
+            predictions.extend(pred_label)
+            labels_squeezed = np.argmax(labels_batch, axis = 1) #Squeeze one hot encoding into 1d labels 
+            labels.extend(labels_squeezed)
+            
+        score = f1_score(labels, predictions, average = 'macro')
+        print ("The macro average f1 score is:",score)
+        print ("The confusion matrix is:", confusion_matrix(labels, predictions))
+        return score
+        
+        
     
