@@ -236,20 +236,22 @@ class LSTM_Model():
     
     def predict_other(self, session, other_data, other_labels):
         '''
-        Use the trained model to predict a batch of non-train data
+        Use the trained model to predict a batch of non-train data. This function returns cross-entropy loss,
+        which helps to validate model parameters
         Arguments:
             session: The tensorflow session
             data: the val or test padded word_embedding indices
             other_labels: the val or test labels        
         '''
         
-        n_minibatches, total_loss = 0, 0
+        n_minibatches, total_loss = 0, 0, 0
         for input_batch, labels_batch in self.get_minibatches(other_data,other_labels, self.other_size):       
             #Need to do this in batches as we might not have enough memory
             feed = self.create_feed_dict(other_data, other_labels)
-            batch_loss = session.run(self.loss, feed_dict = feed) #It will call itself
+            batch_loss = session.run(self.loss, feed_dict = feed)
             total_loss += batch_loss
             n_minibatches+= 1
+            
             #Idk, return total loss, or average over batches?
         average_loss = total_loss/n_minibatches
         print("Total other_loss is:", total_loss)
