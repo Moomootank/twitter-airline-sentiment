@@ -63,7 +63,7 @@ class LSTM_Model():
         Adds following nodes to the computational graph
     
         input_placeholder: Input placeholder tensor of shape
-                                              (batch_size, n_features), type tf.float32
+                                              (batch_size, max_length), type tf.float32
         labels_placeholder: Labels placeholder tensor of shape
                                               (batch_size, n_classes), type tf.int32
         """
@@ -124,14 +124,15 @@ class LSTM_Model():
         
         with tf.name_scope("Prediction_ops"):
             init = tf.contrib.layers.xavier_initializer(uniform = True, dtype= tf.float32)
-            cell_to_use = tf.contrib.rnn.LSTMCell(self.num_hidden_units, initializer = init, activation = tf.tanh)
+            cell_to_use = tf.contrib.rnn.BasicLSTMCell(self.num_hidden_units, activation = tf.tanh)
             cell_to_use = tf.contrib.rnn.DropoutWrapper(cell_to_use, output_keep_prob = 1 - self.num_dropout)
             
             output, state = tf.nn.dynamic_rnn(cell_to_use, inputs = x, sequence_length = tweet_lengths, dtype = tf.float32)
-            final_cell_output = output[:, -1, :] #Slice just the last column of the second layer. 
+            final_cell_output = output[:, -1] #Slice just the last column of the second layer. 
             #final_cell_output should have dimensions (batch_size, num_hidden_units)
             class_weights = tf.get_variable("class_weights", initializer = init, shape = (self.num_hidden_units, self.num_classes))
             class_bias = tf.get_variable("class_bias", initializer = init, shape = (self.num_classes))
+                      
             predictions = tf.matmul(final_cell_output, class_weights) + class_bias #(batch_size x num_classes output)
             
         return predictions
@@ -141,6 +142,8 @@ class LSTM_Model():
         Adds the loss_function
         """        
         with tf.name_scope("loss_ops"):
+            #class_weights = tf.constant([1.595, 4.724, 6.195], dtype = tf.float32)
+            #weight_matrix = tf.reduce_sum(tf.multiply(tf.cast(self.labels_placeholder, tf.float32), class_weights), 1) # Need to weight the losses
             loss = tf.nn.softmax_cross_entropy_with_logits(labels = self.labels_placeholder, logits = predictions)
             loss = tf.reduce_mean(loss)
         return loss
@@ -195,7 +198,6 @@ class LSTM_Model():
             data_sample = reshuffled_data[start:(start + b_size)] # Sample of b size
             labels_sample = reshuffled_labels[start:(start + b_size)]
             batches.append((data_sample, labels_sample))
-        
         return batches
     
     def run_epoch(self, session, data, labels):
@@ -266,16 +268,16 @@ class LSTM_Model():
         labels = []
         for input_batch, labels_batch in self.get_minibatches(other_data,other_labels, self.other_size):
             feed = self.create_feed_dict(input_batch, labels_batch)
-            batch_probs = tf.nn.softmax(self.pred)
-            pred_label = session.run(tf.argmax(batch_probs, axis = 1), feed_dict = feed) #Batch sized length labels
+            batch_probs = session.run(tf.nn.softmax(self.pred), feed_dict = feed)
+            pred_label = session.run(tf.argmax(batch_probs, axis = 1)) #batch size; each index is a predicted label
             predictions.extend(pred_label)
-            labels_squeezed = np.argmax(labels_batch, axis = 1) #Squeeze one hot encoding into 1d labels 
+            labels_squeezed = np.argmax(labels_batch, axis = 1) #Squeeze one hot encoding into 1d labels , to use in f1_score
             labels.extend(labels_squeezed)
             
         score = f1_score(labels, predictions, average = 'macro')
         print ("The macro average f1 score is:",score)
         print ("The confusion matrix is:", confusion_matrix(labels, predictions))
-        return score
+        return (score, labels, predictions, batch_probs)
         
         
     

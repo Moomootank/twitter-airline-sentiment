@@ -38,7 +38,7 @@ def train_model(train_indices, train_labels, other_indices, other_labels, save_d
     with tf.Graph().as_default():
         model = LSTM_Model()
         #847
-        model.define_fixed_hyperparams(100,3, 847, 659, 850, 1e-3, 150, embedding_matrix)
+        model.define_fixed_hyperparams(200,3, 847, 659, 300, 1e-4, 35, embedding_matrix)
         #n_features, n_classes, batch, other_batch, n_epochs, lr, max_l, embeddings
         model.define_network_hyperparams(**params)
         #unfold params into the model
@@ -68,7 +68,7 @@ def train_model_f1_score(train_indices, train_labels, other_indices, other_label
     with tf.Graph().as_default():
         model = LSTM_Model()
         #847
-        model.define_fixed_hyperparams(100,3, 847, 61 , 50, 1e-3, 150, embedding_matrix)
+        model.define_fixed_hyperparams(200,3, 847, 732 , 300, 1e-4, 35, embedding_matrix)
         #n_features, n_classes, batch, other_batch, n_epochs, lr, max_l, embeddings
         model.define_network_hyperparams(**params)
         #unfold params into the model
@@ -88,7 +88,8 @@ def train_model_f1_score(train_indices, train_labels, other_indices, other_label
                 saver = tf.train.Saver()
                 save_path = saver.save(sess, save_dir)
                 print("Model saved in file: {path}".format(path=save_path))
-            return other_avg_loss # return the validation loss
+                
+            return other_avg_loss # return the validation loss, labels, predictions, batch_probs
     
 
 def hyperopt_wrapper_nn(train_indices, train_labels, other_indices, other_labels):    
@@ -109,10 +110,10 @@ def hyperopt_wrapper_nn(train_indices, train_labels, other_indices, other_labels
 def randomized_search(train_indices, train_labels, other_indices, other_labels, file_directory):
     #Randomized hyperparameter search for tensorflow neural network
     #Used instead of hyperopt because hyperopt tends to crash my potato computer (random kernel errors)
-    num_evals = 10
+    num_evals = 100
     
     for search in range(num_evals):
-        n_hidden_units = np.random.randint(50,300)
+        n_hidden_units = np.random.randint(50,500)
         n_dropout = np.random.uniform(0.1, 0.9)
         parameters = {'n_hidden_units': n_hidden_units, 'n_dropout': n_dropout}
         val_loss = train_model(train_indices, train_labels, other_indices, other_labels, None, **parameters)
@@ -122,15 +123,15 @@ def randomized_search(train_indices, train_labels, other_indices, other_labels, 
 if __name__ == "__main__":
     #Load the embeddings 
     embedding_matrix = load_obj(r"D:\Data Science\Projects\twitter-airline-sentiment\training_files\training_data\embedding_matrix.pickle")
-    
+
     #tweets_url = r"D:\Data Science\Projects\twitter-airline-sentiment\training_files\training_data\tweets_clean.csv"
     #tweets_data = pd.read_csv(tweets_url,encoding = "windows-1252") #Apparently windows 1252 removes the error?...
     
     train_indices = load_obj(r"D:\Data Science\Projects\twitter-airline-sentiment\training_files\training_data\train_data\train_indices.pickle")
     train_labels = load_obj(r"D:\Data Science\Projects\twitter-airline-sentiment\training_files\training_data\train_data\train_labels.pickle")
     
-    #val_indices = load_obj(r"D:\Data Science\Projects\twitter-airline-sentiment\training_files\training_data\validation_data\validation_indices.pickle")
-    #val_labels = load_obj(r"D:\Data Science\Projects\twitter-airline-sentiment\training_files\training_data\validation_data\validation_labels.pickle")
+    val_indices = load_obj(r"D:\Data Science\Projects\twitter-airline-sentiment\training_files\training_data\validation_data\validation_indices.pickle")
+    val_labels = load_obj(r"D:\Data Science\Projects\twitter-airline-sentiment\training_files\training_data\validation_data\validation_labels.pickle")
     
     test_indices = load_obj(r"D:\Data Science\Projects\twitter-airline-sentiment\training_files\training_data\test_data\test_indices.pickle")
     test_labels = load_obj(r"D:\Data Science\Projects\twitter-airline-sentiment\training_files\training_data\test_data\test_labels.pickle")
@@ -141,10 +142,9 @@ if __name__ == "__main__":
     #randomized_search(train_indices, train_labels, val_indices, val_labels, random_search_log)
     
     #Evaluating model performance on test set
-    params = {'n_hidden_units': 105, 'n_dropout': 0.7951952285261933}
-    test_score = train_model_f1_score(train_indices, train_labels, test_indices, test_labels, None, **params)
+    params = {'n_hidden_units': 378, 'n_dropout': 0.43694447004009995}
+    score = train_model_f1_score(train_indices, train_labels, test_indices, test_labels, None, **params)
     
-    
-    
+
 
 

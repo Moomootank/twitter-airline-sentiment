@@ -56,6 +56,7 @@ def decrypt_glove(glove_url, dim):
                 #There might be some word vectors with errors in length. I know of at least one
                 print ("The word embedding for {word} is not of the required dimensionality".format(word=line[0]))
                 print ("Embedding is of length: ", len(line))
+                print ("Index is:" , index)
                 continue
            
             word = line[0]         
@@ -64,7 +65,7 @@ def decrypt_glove(glove_url, dim):
             holder.append(line[1:]) #Exclude index 0, as that is the word itself
             current = current + 1
         except IndexError:
-            print ("Null vector triggered at index: ", index)
+            print ("Null vector triggered at index:", index)
             print ("Line is: ", line)
             continue
         except UnicodeEncodeError:
@@ -157,13 +158,13 @@ def load_obj(directory):
         return pickle.load(file)
         
 if __name__ == "__main__":
-    
-    tweets_url = r"Tweets.csv"
+    tweets_url = r"D:\Data Science\Projects\twitter-airline-sentiment\raw_data\Tweets.csv"
     tweets_raw = pd.DataFrame.from_csv(tweets_url)
     tweets = tweets_raw['text']
     
-    glove_url = r"D:\Data Science\Projects\twitter-airline-sentiment\raw_data\glove.twitter.27B.100d.txt"
-    index_dict, embedding_matrix, non_eng = decrypt_glove(glove_url, 100)
+    glove_url = r"D:\Data Science\Projects\twitter-airline-sentiment\raw_data\glove.twitter.27B.200d.txt"
+    index_dict, embedding_matrix, non_eng = decrypt_glove(glove_url, 200)
+    embedding_matrix = (embedding_matrix - np.mean(embedding_matrix, axis = 0))/np.std(embedding_matrix, axis = 0)
     
     save_obj(embedding_matrix, r"D:\Data Science\Projects\twitter-airline-sentiment/training_files/training_data/embedding_matrix.pickle")
 
@@ -171,7 +172,7 @@ if __name__ == "__main__":
     tweets_clean.to_csv(r"../training_files/training_data/tweets_clean.csv")
 
     unknowns, embedding_indices = create_embeddings_numbers(tokens, index_dict)
-    padded_indices = pad_sequences(embedding_indices, 150, embedding_matrix.shape[0] - 1)
+    padded_indices = pad_sequences(embedding_indices, 35, embedding_matrix.shape[0] - 1)
     
     save_obj(padded_indices, r"../training_files/training_data/padded_indices.pickle")
     
