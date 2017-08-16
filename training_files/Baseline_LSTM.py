@@ -20,9 +20,9 @@ from sklearn.metrics import confusion_matrix
 class LSTM_Model():
     
     #=====The following functions define the parameters of the model=====
-    def define_fixed_hyperparams(self, n_features, n_classes, batch, other_batch, n_epochs, lr, max_l, embeddings):
+    def define_fixed_hyperparams(self, n_features, n_classes, batch, other_batch, n_epochs, lr, max_l, n_layers, embeddings):
         """
-        Store information about data hyperparameters
+        Store information about data hyperparameters. These are fixed. 
         n_features = number of columns (independent variables) in data i.e dimension of word embedding
         n_classes = number of classes to predict
         batch = batch size to use in stochastic gradient descent
@@ -30,6 +30,7 @@ class LSTM_Model():
         n_epochs = number of epochs to train for 
         lr = learning rate    
         max_l = max length that RNN can extend for (i.e. longest sequence to parse)
+        n_layers = number of layers in the network (i.e. how deep the network is)
         embeddings = pretrained embeddings that we will use
         """
         self.embed_size = n_features
@@ -39,18 +40,21 @@ class LSTM_Model():
         self.num_epochs =  n_epochs
         self.learning_rate = lr
         self.max_length = max_l
+        self.num_layers = n_layers
         self.pretrained_embeddings = embeddings    
     
-    def define_network_hyperparams(self, n_hidden_units, n_dropout):
+    def define_network_hyperparams(self, n_hidden_units, n_dropout, n_input_dropout):
         '''
         Store information about parameters that we would most likely want to tune using random search/hyperopt etc.
-        n_hidden_units = number of hidden units in a hidden layer
-        n_dropout = dropout rate for the lstm units
+        n_hidden_units = number of hidden units in a hidden layer. If there is more than one layer, this will be a list where [num_units_layer_1, num_units layer_2 etc.]
+        n_dropout = dropout rate for the lstm units. If there is more than one layer, this will be a list as above
         '''
         self.num_hidden_units = n_hidden_units
         self.num_dropout = n_dropout
+        self.input_dropout = n_input_dropout
         print ("Num_hidden_units is:", self.num_hidden_units)
-        print ("Num-dropout is:", self.num_dropout)
+        print ("Num output dropout is:", self.num_dropout)
+        print ("Num input dropout is:", self.input_dropout)
         
     #=====The following functions define the structure of the model=====
     def add_placeholders(self):
@@ -115,6 +119,20 @@ class LSTM_Model():
             tweet_length = tf.cast(tweet_length, dtype=tf.int32)
         return tweet_length
     
+    def add_cells(self):
+        cells = []
+        assert(len(self.num_hidden_units)==len(self.num_dropout))
+        assert(len(self.num_hidden_units)==self.num_layers)
+        
+        for i in range(self.num_layers):
+            without_dropout = tf.contrib.rnn.BasicLSTMCell(self.num_hidden_units[i], activation = tf.tanh)
+            one_layer = tf.contrib.rnn.DropoutWrapper(without_dropout, input_keep_prob = 1 - self.input_dropout, output_keep_prob = 1 - self.num_dropout[i])
+            cells.append(one_layer)
+        
+        multi_cell = tf.contrib.rnn.MultiRNNCell(cells)
+        return multi_cell
+            
+    
     def add_prediction_op(self):
         """
         Adds the RNN and LSTM ops
@@ -124,13 +142,15 @@ class LSTM_Model():
         
         with tf.name_scope("Prediction_ops"):
             init = tf.contrib.layers.xavier_initializer(uniform = True, dtype= tf.float32)
-            cell_to_use = tf.contrib.rnn.BasicLSTMCell(self.num_hidden_units, activation = tf.tanh)
-            cell_to_use = tf.contrib.rnn.DropoutWrapper(cell_to_use, output_keep_prob = 1 - self.num_dropout)
+            #cell_to_use = tf.contrib.rnn.BasicLSTMCell(self.num_hidden_units, activation = tf.tanh)
+            #cell_to_use = tf.contrib.rnn.DropoutWrapper(cell_to_use, output_keep_prob = 1 - self.num_dropout)
+            cell_to_use = self.add_cells()
             
             output, state = tf.nn.dynamic_rnn(cell_to_use, inputs = x, sequence_length = tweet_lengths, dtype = tf.float32)
+            #Output will have shape (batch_size, max_length, num_hidden_units of the topmost layer of the network)
             final_cell_output = output[:, -1] #Slice just the last column of the second layer. 
             #final_cell_output should have dimensions (batch_size, num_hidden_units)
-            class_weights = tf.get_variable("class_weights", initializer = init, shape = (self.num_hidden_units, self.num_classes))
+            class_weights = tf.get_variable("class_weights", initializer = init, shape = (self.num_hidden_units[-1], self.num_classes))
             class_bias = tf.get_variable("class_bias", initializer = init, shape = (self.num_classes))
                       
             predictions = tf.matmul(final_cell_output, class_weights) + class_bias #(batch_size x num_classes output)
@@ -139,7 +159,7 @@ class LSTM_Model():
     
     def add_loss_op(self, predictions):
         """
-        Adds the loss_function
+        Adds the loss_function. Predictions are the pre-softmaxed class predictions at the output layer
         """        
         with tf.name_scope("loss_ops"):
             #class_weights = tf.constant([1.595, 4.724, 6.195], dtype = tf.float32)
@@ -279,5 +299,3 @@ class LSTM_Model():
         print ("The confusion matrix is:", confusion_matrix(labels, predictions))
         return (score, labels, predictions, batch_probs)
         
-        
-    
