@@ -25,6 +25,7 @@ def clean_tweets(data, tweet_col):
     df[tweet_col] = df[tweet_col].map(lambda x: x.lower())
     
     #There are ways to do all the subtitutions in one go. Explore them when you have time. Doesn't seem to work well if reg exps though
+    #Instead of using apply, use str.replace instead
     df[tweet_col] = df[tweet_col].apply(lambda x: re.sub(r"(\S*@\S*\.\S*)", " email address ",x)) #Replace emails with generic email
     df[tweet_col] = df[tweet_col].apply(lambda x: re.sub(r"(?:http\S+)|#\S+|\.|-", " ", x)) #Remove links, hashtags, periods and hyphens
     df[tweet_col] = df[tweet_col].apply(lambda x: re.sub(r"(\d+)", " digit ",x)) #Replace all numbers with "digit"

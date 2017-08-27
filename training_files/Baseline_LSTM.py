@@ -126,7 +126,7 @@ class LSTM_Model():
         
         for i in range(self.num_layers):
             without_dropout = tf.contrib.rnn.BasicLSTMCell(self.num_hidden_units[i], activation = tf.tanh)
-            one_layer = tf.contrib.rnn.DropoutWrapper(without_dropout, input_keep_prob = 1 - self.input_dropout, output_keep_prob = 1 - self.num_dropout[i])
+            one_layer = tf.contrib.rnn.DropoutWrapper(without_dropout, input_keep_prob = 1 - self.input_dropout[i], output_keep_prob = 1 - self.num_dropout[i])
             cells.append(one_layer)
         
         multi_cell = tf.contrib.rnn.MultiRNNCell(cells)
@@ -230,17 +230,30 @@ class LSTM_Model():
         epoch_average_loss = total_loss/n_minibatches
         return epoch_average_loss
      
-    def fit(self, session, data, labels):
+    def fit(self, session, data, labels, other_data, other_labels, saver):
+        #data, labels: training data and labels
+        #other_data, other_labels: the validation/test data and labels
         
         losses = []
         start = time.time() # Start time of the entire model
         previous = start
         
         #self.global_step = tf.Variable(0, dtype = tf.int32, trainable = False, name = 'global_step')
-        #set the global step
+        best_loss = 100 # Initial val score
+        
         for epoch in range(self.num_epochs):
             average_loss = self.run_epoch(session, data, labels)
+            losses.append(average_loss)
+            
+            if epoch%15==0 or epoch==self.num_epochs-1:
+                val_loss = self.predict_other(session, other_data, other_labels)
+                if val_loss < best_loss:
+                    best_loss = val_loss    
+                    saver.save(session, "training_logs/checkpoints/current_best.ckpt")
+                    print ("New best model saved")
+            
             if epoch % 50 ==0 or epoch==self.num_epochs-1: #-1 due to characteristics of range
+            #This if block just prints out the progressand time taken to reach a certain stage
                 current_time = time.time()
                 duration = current_time - start
                 duration_min = math.floor(duration/60)
@@ -255,10 +268,9 @@ class LSTM_Model():
                 print ("Average loss this epoch is:" , average_loss)
                 print ()
                 previous = current_time #Set the new "last checkpoint" to this one
-            losses.append(average_loss)
         return losses #Can try to plot how much the loss has gone down
     
-    def predict_other(self, session, other_data, other_labels):
+    def predict_other(self, session, other_data, other_labels, console=False):
         '''
         Use the trained model to predict a batch of non-train data
         Arguments:
@@ -276,8 +288,10 @@ class LSTM_Model():
             n_minibatches+= 1
             #Idk, return total loss, or average over batches?
         average_loss = total_loss/n_minibatches
-        print("Total other_loss is:", total_loss)
-        print ("Average batch other_loss is:", average_loss)
+        if console:
+            print("Total other_loss is:", total_loss)
+            print ("Average batch other_loss is:", average_loss)
+            print()
         return average_loss
     
     def predict_f1(self, session, other_data, other_labels):
@@ -296,6 +310,6 @@ class LSTM_Model():
             
         score = f1_score(labels, predictions, average = 'macro')
         print ("The macro average f1 score is:",score)
-        print ("The confusion matrix is:", confusion_matrix(labels, predictions))
+        print ("The confusion matrix is:\n", confusion_matrix(labels, predictions))
         return (score, labels, predictions, batch_probs)
         
