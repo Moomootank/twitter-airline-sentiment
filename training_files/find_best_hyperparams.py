@@ -15,7 +15,9 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from Baseline_LSTM import LSTM_Model
+from unidirectional_lstm import Unidirectional_LSTM
+from bidirectional_lstm import Bidirectional_LSTM
+from config_class import Config
 from hyperopt import fmin, tpe, hp, STATUS_OK, Trials
 
 
@@ -30,7 +32,7 @@ def load_obj(name):
         
 #=====The following methods define ways to train the model and predict using it
 
-def train_model(train_indices, train_labels, other_indices, other_labels, embedding_matrix, **params):
+def train_model(train_indices, train_labels, other_indices, other_labels, config, **params):
     '''
     Function that trains a tensorflow model with the desired parameters, then checks loss on validation/test set
     
@@ -38,8 +40,9 @@ def train_model(train_indices, train_labels, other_indices, other_labels, embedd
     print ("Optimizing params:", params)
     graph = tf.Graph()
     with graph.as_default():
-        model = LSTM_Model()
-        model.define_fixed_hyperparams(200,3, 1694, 659, 600, 1e-4, 35, 2, embedding_matrix)
+        model = Bidirectional_LSTM(config) # Feed the config object into the model
+        
+        #model.define_fixed_hyperparams(200,3, 1694, 659, 600, 1e-4, 35, 2, embedding_matrix)
         #n_features, n_classes, batch, other_batch, n_epochs, lr, max_l, num_layers, embeddings
         model.define_network_hyperparams(**params)
         #unfold params into the model
@@ -60,7 +63,7 @@ def train_model(train_indices, train_labels, other_indices, other_labels, embedd
 
         return graph, sess, model
 
-def predict_using_model(graph, sess, model, other_indices, other_labels, metric, other_batch):
+def predict_using_model(graph, sess, model, other_indices, other_labels, metric, val):
     '''
     Function that uses a trained model to predict on the hold-out set
     Arguments:
@@ -76,33 +79,30 @@ def predict_using_model(graph, sess, model, other_indices, other_labels, metric,
     with graph.as_default():
         model.num_dropout = [0]*model.num_layers #When we use a trained model for prediction, we don't want dropout in the model
         model.input_dropout = [0]*model.num_layers
-        
-        model.other_size = other_batch
-                
+                   
         if metric=="cross_entropy":
-            other_avg_loss = model.predict_other(sess, other_indices, other_labels, True)
+            other_avg_loss = model.predict_other(sess, other_indices, other_labels, val, True)
         elif metric=="f1_score":
-            other_avg_loss = model.predict_f1(sess, other_indices, other_labels)
+            other_avg_loss = model.predict_f1(sess, other_indices, other_labels, val)
         else:
             print ("The evaluation metric you chose has not yet been implemented in the model")
             return
                 
-        sess.close()
         return other_avg_loss
 
 
 #=====The following methods define ways to tune the model's hyperparameters
 
-def hyperopt_wrapper_nn(train_indices, train_labels, other_indices, other_labels, embeddings, file_directory, load):    
+def hyperopt_wrapper_nn(train_indices, train_labels, other_indices, other_labels, config, file_directory, load):    
                    
     def minimize_this(params):       
-        graph, session, model = train_model(train_indices, train_labels, other_indices, other_labels, embeddings, **params)
-        score = predict_using_model(graph, session, model, other_indices, other_labels, 'cross_entropy', 659)
+        graph, session, model = train_model(train_indices, train_labels, other_indices, other_labels, config, **params)
+        score = predict_using_model(graph, session, model, other_indices, other_labels, 'cross_entropy', True) #val=True; we are returning loss on val set
         return {'loss': score , 'status': STATUS_OK} #Make sure score is positive. Should be if you use tf.nn.softmax_cross_entropy_with_logits
     
-    nndict = {'n_hidden_units': [hp.quniform('n_hidden_units_1', 50, 500, 1), hp.quniform('n_hidden_units_2', 50, 500, 1)], 
-              'n_dropout' : [hp.uniform('n_dropout_1',0.1,0.90), hp.uniform('n_dropout_2',0.1,0.90)],
-              'n_input_dropout': [hp.uniform('n_input_dropout_1',0.1,0.90), hp.uniform('n_input_dropout_2',0.1,0.90)]}
+    nndict = {'n_hidden_units': [hp.quniform('n_hidden_units_1', 50, 500, 1)], 
+              'n_dropout' : [hp.uniform('n_dropout_1',0.1,0.90)],
+              'n_input_dropout': [hp.uniform('n_input_dropout_1',0.1,0.90)]}
     
     if load:
         print ("Loading Trials object")
@@ -110,15 +110,14 @@ def hyperopt_wrapper_nn(train_indices, train_labels, other_indices, other_labels
     else:
         trials = Trials() # Else, start from scratch
         
-    best = fmin(fn=minimize_this, space = nndict, algo= tpe.suggest, max_evals = 101, trials= trials)
+    best = fmin(fn=minimize_this, space = nndict, algo= tpe.suggest, max_evals = 85, trials= trials)
     print ("Saving trials object")
     save_obj(trials, file_directory) 
     
-    save_obj(best, r"D:\Data Science\Projects\twitter-airline-sentiment\training_files\training_logs\two_layer_best_hyperparams.pickle")
     print ('Best hyperparams:', best)
     return best, trials
 
-def randomized_search(train_indices, train_labels, other_indices, other_labels, embeddings, file_directory):
+def randomized_search(train_indices, train_labels, other_indices, other_labels, config, file_directory):
     #Randomized hyperparameter search for tensorflow neural network
     #Used instead of hyperopt because hyperopt tends to crash my potato computer (random kernel errors)
     num_evals = 100
@@ -127,14 +126,14 @@ def randomized_search(train_indices, train_labels, other_indices, other_labels, 
         n_hidden_units = [np.random.randint(50,500), np.random.randint(50,500)]
         n_dropout = [np.random.uniform(0.1, 0.9), np.random.uniform(0.1, 0.9)]
         parameters = {'n_hidden_units': n_hidden_units, 'n_dropout': n_dropout}
-        graph, session, model = train_model(train_indices, train_labels, other_indices, other_labels, embeddings, **parameters)
-        val_loss = predict_using_model(graph, session, model, other_indices, other_labels, 'cross_entropy', 659)
+        graph, session, model = train_model(train_indices, train_labels, other_indices, other_labels, config, **parameters)
+        val_loss = predict_using_model(graph, session, model, other_indices, other_labels, 'cross_entropy', True)
         
         with open(file_directory, 'a') as file:
             file.writelines("{units} {dropout} {val}\n".format(units=n_hidden_units, dropout=n_dropout, val = val_loss))
        
 if __name__ == "__main__":
-    #Load the embeddings 
+    #=====This section loads all the necessary data for the model=====
     embedding_matrix = load_obj(r"D:\Data Science\Projects\twitter-airline-sentiment\training_files\training_data\embedding_matrix.pickle")
 
     #tweets_url = r"D:\Data Science\Projects\twitter-airline-sentiment\training_files\training_data\tweets_clean.csv"
@@ -149,18 +148,35 @@ if __name__ == "__main__":
     test_indices = load_obj(r"D:\Data Science\Projects\twitter-airline-sentiment\training_files\training_data\test_data\test_indices.pickle")
     test_labels = load_obj(r"D:\Data Science\Projects\twitter-airline-sentiment\training_files\training_data\test_data\test_labels.pickle")
     
+    #=====The following line specifies the fixed parameters of the model=====
+    
+    config = Config(200,3, 1694, 659, 732, 500, 1e-4, 35, 1, embedding_matrix)
+    #n_features, n_classes, batch, val_batch, test_batch, n_epochs, lr, max_l, n_layers, embeddings
+    
     #Uae hyperopt to find the best hyperparameters
-    hyp_dir = r"D:\Data Science\Projects\twitter-airline-sentiment\training_files\training_logs\two_layer_hyperopt_trials.pickle"
-    #best, trials = hyperopt_wrapper_nn(train_indices, train_labels, val_indices, val_labels, embedding_matrix, hyp_dir, True)
+    hyp_dir = r"D:\Data Science\Projects\twitter-airline-sentiment\training_files\training_logs\hyperopt\bd_1l_hyp_trials.pickle"
+    #best, trials = hyperopt_wrapper_nn(train_indices, train_labels, val_indices, val_labels, config, hyp_dir, True)
     
-    #random_search_log = r"D:\Data Science\Projects\twitter-airline-sentiment\training_files\training_logs\two_layer_random_search_log.csv"
-    #randomized_search(train_indices, train_labels, val_indices, val_labels, embedding_matrix,  random_search_log)
+    '''
+    Use random search to find the best hyperparameters
+    random_search_log = r"D:\Data Science\Projects\twitter-airline-sentiment\training_files\training_logs\random_search\two_layer_random_search_log.csv"
+    randomized_search(train_indices, train_labels, val_indices, val_labels, config,  random_search_log)
+    '''
         
-    #Evaluating model performance on test set
+    #=====Evaluating model performance on test set=====
+    '''
+    vals': {'n_dropout_1': [0.12294832533717485],
+   'n_hidden_units_1': [495.0],
+   'n_input_dropout_1': [0.2733961323768681]}
+    '''
     
-    params = {'n_input_dropout': (0.2061507591654901, 0.46112350718628653), 'n_hidden_units': (329, 158.0), 
-    'n_dropout': (0.8478685016810508, 0.46317530197131607)} 
-    graph, session, model = train_model(train_indices, train_labels, val_indices, val_labels, embedding_matrix, **params)
-    score = predict_using_model(graph, session, model, test_indices, test_labels, "f1_score", 732)
+    params = {'n_input_dropout': [0], 'n_hidden_units': [378], 
+    'n_dropout': [0.43694447004009995]} 
+    graph, session, model = train_model(train_indices, train_labels, val_indices, val_labels, config, **params)
+    ce_score = predict_using_model(graph, session, model, test_indices, test_labels, "cross_entropy", False)
+    f1_score = predict_using_model(graph, session, model, test_indices, test_labels, "f1_score", False)
+
     
+    
+
     
