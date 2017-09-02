@@ -2,3 +2,4 @@
 /training_files/training_data/embedding_matrix.pickle
 /training_files/__pycache__
 /raw_data/glove.twitter.27B.200d.txt
+/training_files/training_logs/checkpoints
